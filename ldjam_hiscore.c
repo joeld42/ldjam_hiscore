@@ -155,6 +155,12 @@ static void _ldjam_parse_scoreboard_response( LDJam_Context *ctx, const char *js
 	}
 }
 
+void _ldjam_parse_fetchscores_response( LDJam_Context *ctx, const char *json, LDJam_Scoreboard *board )
+{
+	printf("_ldjam_parse_fetchscores_response...\n");
+	printf("TODO: json is %s\n\n", json );
+}
+
 void ldjam_init_context( LDJam_Context *ctx, const char *api_key, void *userdata )
 {
 	memset( ctx, 0, sizeof(LDJam_Context) );
@@ -216,6 +222,22 @@ void ldjam_create_scoreboard( LDJam_Context *ctx, const char *scoreboard_name,
 	_ldjam_context_push_request( ctx, request );
 }
 
+LDJam_Scoreboard *ldjam_init_scoreboard( LDJam_Context *ctx, 
+	const char *scoreboard_name, uint32_t scoreboardId )
+{
+	// Make a slot for the new scoreboard	
+	// FIXME: Use same custom allocator as HTTP or something
+	assert( ctx->num_scoreboards < MAX_SCOREBOARDS-1 );
+	ctx->scoreboards[ ctx->num_scoreboards ] = (LDJam_Scoreboard*)malloc( sizeof (LDJam_Scoreboard));		
+	LDJam_Scoreboard *board = ctx->scoreboards[ ctx->num_scoreboards ];
+	ctx->num_scoreboards++;
+	memset( board, 0, sizeof(LDJam_Scoreboard) );
+	strcpy( board->name, scoreboard_name );
+	board->id = scoreboardId;
+
+	return board;
+}
+
 void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, const char *playername, int score,
 						     LDJam_SubmitScore_Callback success,
 						     LDJam_ErrorCallback error )
@@ -243,8 +265,27 @@ void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, const 
 //     "username": "username",
 //     "score": "5"
 // }
+	printf("SUBMIT SCORE: %s\n\n", post_data );
 
 	request.req = http_post( restUrl, post_data, strlen(post_data), NULL );
+	_ldjam_context_push_request( ctx, request );
+}
+
+void ldjam_fetch_scoreboard( LDJam_Context *ctx, LDJam_Scoreboard *board,
+							 LDJam_FetchScoreboard_Callback success,
+						     LDJam_ErrorCallback error )
+{
+	LDJam_Request request = {0};
+	request.requestType = LDJam_Request_FetchScores;	
+	request.userdata = ctx->userdata;
+	request.cb_error = error;
+	request.cb_fetch_success = success;
+	request.scoreboard = board;
+
+	char restUrl[256];
+	sprintf(restUrl, HISCORE_SERVER_BASE "highscore/%d", board->id );
+
+	request.req = http_get( restUrl, NULL );
 	_ldjam_context_push_request( ctx, request );
 }
 
@@ -290,7 +331,17 @@ void ldjam_update( LDJam_Context *ctx )
 					
 					// Assume we got "Entry Added!"
 					if (request->cb_submit_success) {
-						request->cb_submit_success( ctx );	
+						request->cb_submit_success( ctx, request->scoreboard );	
+					}
+
+				} else if (request->requestType == LDJam_Request_FetchScores) {
+
+					_ldjam_parse_fetchscores_response( ctx, 
+								(const char *)request->req->response_data,
+								request->scoreboard );
+
+					if (request->cb_fetch_success) {
+						request->cb_fetch_success( ctx, request->scoreboard );
 					}
 
 				} else {

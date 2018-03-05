@@ -5,6 +5,9 @@
 #define HTTP_IMPLEMENTATION
 #include "http.h"                                                                                                                                                            
 
+// Get this from the dashboard
+#define SCOREBOARD_ID (20)
+
 typedef struct MyGameInfoStruct {
     int done;
 } MyGameInfo;
@@ -18,14 +21,25 @@ void errorCallback(LDJam_Context *ctx, int status_code, const char *error_msg)
     game->done = 1;
 }
 
-void submitScoreCallback( LDJam_Context *ctx )
+
+void fetchScoreboardCallback( LDJam_Context *ctx, LDJam_Scoreboard *board )
+{
+    MyGameInfo *game = (MyGameInfo*)ctx->userdata;
+    printf("SIMPLETEST: Fetched scoreboard '%s (id %d)'!\n", board->name, board->id );
+
+    // TODO: Print out scores in Board
+    
+    game->done = 1;
+}
+
+void submitScoreCallback( LDJam_Context *ctx, LDJam_Scoreboard *board )
 {
     MyGameInfo *game = (MyGameInfo*)ctx->userdata;
     printf("SIMPLETEST: submitted score to scoreboard!\n" );
 
-    game->done = 1;
+    // Now fetch the updated scores
+    ldjam_fetch_scoreboard( ctx, board, fetchScoreboardCallback, errorCallback );
 }
-
 
 void createScoreboardCallback( LDJam_Context *ctx, LDJam_Scoreboard *board )
 {
@@ -36,7 +50,6 @@ void createScoreboardCallback( LDJam_Context *ctx, LDJam_Scoreboard *board )
     // Now submit a score to it!
     int score = 100 + (rand() %100);
     ldjam_submit_highscore( ctx, board, "someplayer", score, submitScoreCallback, errorCallback );
-
 }
 
 
@@ -45,12 +58,22 @@ int main( int argc, char **argv )
     LDJam_Context ctx;
     MyGameInfo game = {0};    
 
+    srand(time(NULL));    
+
     ldjam_init_context( &ctx, "MY_API_KEY", &game );
 
 
     // Make a new scoreboard
-    ldjam_create_scoreboard( &ctx, "com.ldjam.veryfungame", createScoreboardCallback, errorCallback );
+    //ldjam_create_scoreboard( &ctx, "com.ldjam.veryfungame", createScoreboardCallback, errorCallback );
 
+    // Get an existing scoreboard
+    LDJam_Scoreboard *board = ldjam_init_scoreboard( &ctx, "com.ldjam.veryfungame", 20 );
+
+    // Submit a new score
+    int score = 100 + (rand() %100);
+    ldjam_submit_highscore( &ctx, board, "namename", score, submitScoreCallback, errorCallback );
+
+    // Process requests until we're done
     while (( ctx.num_active_requests ) || (!game.done))  {
         ldjam_update(&ctx);
         usleep(1000 * 16);
