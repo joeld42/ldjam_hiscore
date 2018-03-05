@@ -198,7 +198,7 @@ void ldjam_create_scoreboard( LDJam_Context *ctx, const char *scoreboard_name,
 
 
 	// FIXME: calculate length, and/or limit scoreboard_name
-	char *post_data = (char *)malloc(1024);
+	char post_data[1024];
 	sprintf( post_data, "{\n"
     					 "\"id\": \"0\",\n"
     					 "\"name\": \"%s\",\n"
@@ -216,17 +216,35 @@ void ldjam_create_scoreboard( LDJam_Context *ctx, const char *scoreboard_name,
 	_ldjam_context_push_request( ctx, request );
 }
 
-void ldjam_submit_highscore( LDJam_Context *ctx, int score )
+void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, const char *playername, int score,
+						     LDJam_SubmitScore_Callback success,
+						     LDJam_ErrorCallback error )
 {
 	LDJam_Request request = {0};
 	request.requestType = LDJam_Request_Submit;	
 	request.userdata = ctx->userdata;
-	//request->cb_error = error;
-	//request->cb_create_succes = success;
+	request.cb_error = error;
+	request.cb_submit_success = success;
+	request.scoreboard = board;
 
-	// TODO
+	char restUrl[256];
+	sprintf(restUrl, HISCORE_SERVER_BASE "highscore/%d", board->id );
 
-	request.req = http_get( HISCORE_SERVER_BASE "api/highscore/123", NULL );
+	printf("Submit score: %s\n", restUrl );
+
+	char post_data[1024];
+	sprintf( post_data, "{\n"
+    					 "\"id\": \"%d\",\n"
+    					 "\"username\": \"%s\",\n"
+    					 "\"score\": \"%d\"\n"
+						 "}", board->id, playername, score );
+// 	{
+//     "id": "1",
+//     "username": "username",
+//     "score": "5"
+// }
+
+	request.req = http_post( restUrl, post_data, strlen(post_data), NULL );
 	_ldjam_context_push_request( ctx, request );
 }
 
@@ -249,6 +267,9 @@ void ldjam_update( LDJam_Context *ctx )
 			if( status == HTTP_STATUS_FAILED ) {
 
 				printf( "HTTP request failed (%d): %s.\n", request->req->status_code, request->req->reason_phrase );
+				if (request->cb_error) {
+					request->cb_error( ctx, request->req->status_code, request->req->reason_phrase );
+				}
 
 			} else {
 				printf("request succeeded!\n");				
@@ -266,7 +287,12 @@ void ldjam_update( LDJam_Context *ctx )
 					}
 
 				} else if (request->requestType == LDJam_Request_Submit) {
-					printf("TODO: Handle submit request");
+					
+					// Assume we got "Entry Added!"
+					if (request->cb_submit_success) {
+						request->cb_submit_success( ctx );	
+					}
+
 				} else {
 					printf("Unexpected request type: %d\n", request->requestType );
 				}

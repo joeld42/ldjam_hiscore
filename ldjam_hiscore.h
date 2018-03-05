@@ -17,9 +17,9 @@ struct LDJam_Scoreboard_Struct;
 typedef struct LDJam_Context_Struct LDJam_Context;
 typedef struct LDJam_Scoreboard_Struct LDJam_Scoreboard;
 
-
 typedef void (*LDJam_ErrorCallback)(LDJam_Context *ctx, int status_code, const char *error_msg);
 typedef void (*LDJam_CreateScoreBoard_Callback)( LDJam_Context *ctx, LDJam_Scoreboard *board );
+typedef void (*LDJam_SubmitScore_Callback)( LDJam_Context *ctx );
 
 typedef struct LDJam_Request_Struct {
 	uint32_t requestType;
@@ -31,6 +31,10 @@ typedef struct LDJam_Request_Struct {
 	// Scoreboard info
 	LDJam_Scoreboard *scoreboard;
 	LDJam_CreateScoreBoard_Callback cb_create_success;
+
+	// Submit info
+	LDJam_SubmitScore_Callback cb_submit_success;
+
 } LDJam_Request;
 
 
@@ -63,6 +67,9 @@ void ldjam_create_scoreboard( LDJam_Context *ctx, const char *scoreboard_name,
 							  LDJam_CreateScoreBoard_Callback success, 
 							  LDJam_ErrorCallback error );
 
-void ldjam_submit_highscore( LDJam_Context *ctx, int score );
+void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, const char *playername, int score,
+						     LDJam_SubmitScore_Callback success,
+						     LDJam_ErrorCallback error );
+
 void ldjam_update();
 

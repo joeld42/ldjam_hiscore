@@ -13,19 +13,32 @@ void errorCallback(LDJam_Context *ctx, int status_code, const char *error_msg)
 {
     MyGameInfo *game = (MyGameInfo*)ctx->userdata;   
 
-    printf("ERROR: (status code %d) '%s'\n", status_code, error_msg );
+    printf("SIMPLETEST (ERROR): (status code %d) '%s'\n", status_code, error_msg );
 
     game->done = 1;
 }
+
+void submitScoreCallback( LDJam_Context *ctx )
+{
+    MyGameInfo *game = (MyGameInfo*)ctx->userdata;
+    printf("SIMPLETEST: submitted score to scoreboard!\n" );
+
+    game->done = 1;
+}
+
 
 void createScoreboardCallback( LDJam_Context *ctx, LDJam_Scoreboard *board )
 {
     MyGameInfo *game = (MyGameInfo*)ctx->userdata;
 
-    printf("Created scoreboard succeeded '%s' (id %d).\n", board->name, board->id );
+    printf("SIMPLETEST: Created scoreboard succeeded '%s' (id %d).\n", board->name, board->id );
 
-    game->done = 1;
+    // Now submit a score to it!
+    int score = 100 + (rand() %100);
+    ldjam_submit_highscore( ctx, board, "someplayer", score, submitScoreCallback, errorCallback );
+
 }
+
 
 int main( int argc, char **argv )
 {
