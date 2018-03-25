@@ -11,6 +11,8 @@
 
 #define HISCORE_SERVER_BASE "http://wujood.ddns.net:8080/api/"
 
+#define LOCAL static
+
 // string type that can be used as a range into a buffer
 typedef struct _LDJam_String_Struct
 {
@@ -18,7 +20,7 @@ typedef struct _LDJam_String_Struct
 	const char *end;
 } _LDJam_String;
 
-static _LDJam_String _LDJam_NULL_Str = {0};
+LOCAL _LDJam_String _LDJam_NULL_Str = {0};
 
 typedef struct _LDJam_KeyValuePair_Struct
 {
@@ -26,7 +28,7 @@ typedef struct _LDJam_KeyValuePair_Struct
 	_LDJam_String value;
 } _LDJam_KeyValuePair;
 
-static int _ldjam_str_compare_cstr( _LDJam_String strA, const char *cstr )
+LOCAL int _ldjam_str_compare_cstr( _LDJam_String strA, const char *cstr )
 {
 	int expectedLen = (strA.end - strA.base);
 	if (expectedLen != strlen(cstr)) {
@@ -37,7 +39,7 @@ static int _ldjam_str_compare_cstr( _LDJam_String strA, const char *cstr )
 	return 0;
 }
 
-static int _ldjam_str_compare( _LDJam_String strA, _LDJam_String strB )
+LOCAL int _ldjam_str_compare( _LDJam_String strA, _LDJam_String strB )
 {
 	if ((strA.end - strA.base) != (strB.end - strB.base)) {
 		return 1;
@@ -51,7 +53,7 @@ static int _ldjam_str_compare( _LDJam_String strA, _LDJam_String strB )
 	return 0;
 }
 
-static void _ldjam_str_extract( char *dest_buff, _LDJam_String str )
+LOCAL void _ldjam_str_extract( char *dest_buff, _LDJam_String str )
 {
 	char *dest = dest_buff;
 	for (const char *ch = str.base; ch != str.end; ch++) {
@@ -60,7 +62,7 @@ static void _ldjam_str_extract( char *dest_buff, _LDJam_String str )
 	*dest = '\0';
 }
 
-static void _ldjam_context_push_request( LDJam_Context *ctx, LDJam_Request request )
+LOCAL void _ldjam_context_push_request( LDJam_Context *ctx, LDJam_Request request )
 {	
     if( !request.req )
     {
@@ -70,12 +72,12 @@ static void _ldjam_context_push_request( LDJam_Context *ctx, LDJam_Request reque
     }
 }
 
-static int _ldjam_shouldstrip( char ch )
+LOCAL int _ldjam_shouldstrip( char ch )
 {
 	return (ch==' ') || (ch=='\t') || (ch=='\n') || (ch=='\"');
 }
 
-static void _ldjam_strip_and_unquote( _LDJam_String *str )
+LOCAL void _ldjam_strip_and_unquote( _LDJam_String *str )
 {
 	while ((*str->base) && (_ldjam_shouldstrip( *str->base )) ) {
 		str->base++;
@@ -87,7 +89,7 @@ static void _ldjam_strip_and_unquote( _LDJam_String *str )
 
 }
 
-static int _ldjam_parse_next_pair( const char *ch, _LDJam_KeyValuePair *pair )
+LOCAL int _ldjam_parse_next_pair( const char *ch, _LDJam_KeyValuePair *pair )
 {
 	// find the next key
 	pair->key.base = strchr( ch, '\"' );
@@ -112,13 +114,26 @@ static int _ldjam_parse_next_pair( const char *ch, _LDJam_KeyValuePair *pair )
 	}
 	pair->value.base++;
 
-	// Look for ',' or '}'
+	// Look for ',' or '}', or '[' to start an array
+	int isArray = 0;
 	pair->value.end = pair->value.base;
 	while (pair->value.end) {
+		// printf("VAL: '%c'\n", *pair->value.end );
+		if ((*pair->value.end=='[')) {
+			printf ("Is Array!\n");
+			isArray = 1;
+		}
+
 		pair->value.end++;
 
-		if ((*pair->value.end==',') || (*pair->value.end=='}')) {			
-			break;
+		if (isArray) {
+			// If this is an array, consume everything up to the end
+			if (*pair->value.end==']') {
+				pair->value.end++;
+				break;				
+			}
+		} else if ((*pair->value.end==',') || (*pair->value.end=='}')) {			
+			break;			
 		}
 	}
 	if (!pair->value.end) {
@@ -131,7 +146,7 @@ static int _ldjam_parse_next_pair( const char *ch, _LDJam_KeyValuePair *pair )
 	return 1;
 }
 
-static void _ldjam_parse_scoreboard_response( LDJam_Context *ctx, const char *json, LDJam_Scoreboard *board )
+LOCAL void _ldjam_parse_scoreboard_response( LDJam_Context *ctx, const char *json, LDJam_Scoreboard *board )
 {	
 	printf("_ldjam_parse_scoreboard_response...\n" );
 	// For now this is really dumb and doesn't support nested json
@@ -155,10 +170,116 @@ static void _ldjam_parse_scoreboard_response( LDJam_Context *ctx, const char *js
 	}
 }
 
-void _ldjam_parse_fetchscores_response( LDJam_Context *ctx, const char *json, LDJam_Scoreboard *board )
+// Find the end of a block by counting braces
+LOCAL _LDJam_String _ldjam_parse_block( const char *start )
+{
+	printf("  _ldjam_parse_block...\n");
+
+	int braceCount = 0;	
+	_LDJam_String range;
+	range.base = start;
+	range.end = start;
+	assert( *range.base=='{');
+	do {
+		if (*range.end=='{') {
+			braceCount++;
+		} else if (*range.end=='}') {
+			braceCount--;		
+		}
+		range.end++;
+
+	} while ((*range.end) && (braceCount>0));
+
+	return range;
+}
+
+LOCAL void _ldjam_parse_score( LDJam_Context *ctx, LDJam_Scoreboard *board, _LDJam_String scoreStr )
+{
+	LDJam_Score *score = board->scores + board->num_scores;
+
+	const char *ch = scoreStr.base;
+	_LDJam_KeyValuePair pair = {0};
+	while (_ldjam_parse_next_pair( ch, &pair ) && (ch < scoreStr.end)) {	
+
+		char keybuff[512];
+		char valbuff[512];
+		_ldjam_str_extract( keybuff, pair.key );	
+		
+
+		// Look for fields we care about
+		if (!_ldjam_str_compare_cstr( pair.key, "username")) {
+			_ldjam_str_extract( score->username, pair.value );	
+		} else if (!_ldjam_str_compare_cstr( pair.key, "score")) {
+			score->score = strtol( pair.value.base, NULL, 10 );
+		}
+
+		ch = pair.value.end + 1;		
+	}	
+
+	printf("Got Score: player '%s' score %d\n", score->username, score->score );
+	board->num_scores++;
+
+}
+
+LOCAL void _ldjam_parse_entries( LDJam_Context *ctx, LDJam_Scoreboard *board, _LDJam_String arrayStr )
+{
+	const char *ch = arrayStr.base + 1;
+	
+	// Reset scoreboard
+	board->num_scores = 0;
+
+	while (*arrayStr.base!='{') {
+		arrayStr.base++;
+	}
+
+	while (arrayStr.base < arrayStr.end) 
+	{
+		_LDJam_String rangeStr = _ldjam_parse_block( arrayStr.base );
+
+		//char entbuff[512];
+		//_ldjam_str_extract( entbuff, rangeStr );
+		//printf("ENT BLOCK:\n%s\n", entbuff );
+
+		_ldjam_parse_score( ctx, board, rangeStr );
+
+		arrayStr.base = rangeStr.end;
+		do {
+			arrayStr.base++;
+		} while ((*arrayStr.base==' ') || (*arrayStr.base=='\t') || (*arrayStr.base==',') || (*arrayStr.base=='\n'));
+
+	}
+
+
+}
+
+LOCAL void _ldjam_parse_fetchscores_response( LDJam_Context *ctx, const char *json, LDJam_Scoreboard *board )
 {
 	printf("_ldjam_parse_fetchscores_response...\n");
-	printf("TODO: json is %s\n\n", json );
+	printf("json is\n---\n%s\n---\n", json );
+	
+	_LDJam_KeyValuePair pair = {0};
+
+	const char *ch = json;
+	while (_ldjam_parse_next_pair( ch, &pair )) {	
+
+		char keybuff[512];
+		char valbuff[512];
+		_ldjam_str_extract( keybuff, pair.key );	
+		_ldjam_str_extract( valbuff, pair.value );	
+		//printf("JSON PAIR: key '%s' : value '%s'\n", keybuff, valbuff );
+
+		// Look for fields we care about
+		if (!_ldjam_str_compare_cstr( pair.key, "entries")) {
+			if (*pair.value.base!='[') {
+				printf("WARNING: Expected entries array, got '%s'\n", valbuff );
+			} else {
+				_ldjam_parse_entries( ctx, board, pair.value );
+			}
+		}
+
+
+		ch = pair.value.end + 1;
+	}
 }
 
 void ldjam_init_context( LDJam_Context *ctx, const char *api_key, void *userdata )
@@ -363,4 +484,55 @@ void ldjam_update( LDJam_Context *ctx )
 		}
 	}
 	printf("Update: %d active requests\n", ctx->num_active_requests );
+}
+
+// TODO: get rid of this
+void *readEntireFile( const char *filename, size_t *out_filesz )
+{
+    FILE *fp = fopen( filename, "r" );
+    if (!fp) return NULL;
+    
+    // Get file size
+    fseek( fp, 0L, SEEK_END );
+    size_t filesz = ftell(fp);
+    fseek( fp, 0L, SEEK_SET );
+
+    void *fileData = malloc( filesz );
+    if (fileData)
+    {
+        size_t result = fread( fileData, filesz, 1, fp );
+        
+        // result is # of chunks read, we're asking for 1, fread
+        // won't return partial reads, so it's all or nothing.
+        if (!result)
+        {
+            free( fileData);
+            fileData = NULL;
+        }
+        else
+        {
+            // read suceeded, set out filesize
+            *out_filesz = filesz;
+        }
+    }
+    
+    return fileData;
+    
+}
+
+void TestStuff() 
+{
+	size_t sz = 0;
+	const char *scoresjson = readEntireFile( "testresponse.json", &sz );
+	
+	LDJam_Context ctx;
+	ldjam_init_context( &ctx, "MY_API_KEY", NULL );
+	LDJam_Scoreboard *board = ldjam_init_scoreboard( &ctx, "com.ldjam.veryfungame", 20 );
+
+
+	_ldjam_parse_fetchscores_response( &ctx, scoresjson, board );
+	for (int i=0; i < board->num_scores; i++) {
+		printf("%d) %12s  ... %d\n", i+1, board->scores[i].username, board->scores[i].score );
+	}
+
 }

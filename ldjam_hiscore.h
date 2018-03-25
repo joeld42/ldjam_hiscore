@@ -7,6 +7,8 @@
 
 #define MAX_SCOREBOARDS (32)
 
+#define MAX_SCORES (50)
+
 enum {
 
 	// GET Requests
@@ -56,7 +58,10 @@ typedef struct LDJam_Scoreboard_Struct {
 	uint32_t id; // Internal ID
 	char name[256];
 
-	// TODO: entries
+	// TODO: When it's decided if this will return a fixed number of scores
+	// or not, maybe change this to a growing list
+	int num_scores;
+	LDJam_Score scores[MAX_SCORES];
 
 } LDJam_Scoreboard;
 
@@ -98,6 +103,7 @@ void ldjam_fetch_scoreboard( LDJam_Context *ctx, LDJam_Scoreboard *board,
 							 LDJam_FetchScoreboard_Callback success,
 						     LDJam_ErrorCallback error );
 
-
 void ldjam_update();
+
+void TestStuff();
 
