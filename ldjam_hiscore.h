@@ -4,9 +4,7 @@
 #include "http.h"
 
 #define MAX_REQUESTS (10)
-
 #define MAX_SCOREBOARDS (32)
-
 #define MAX_SCORES (50)
 
 enum {
@@ -94,7 +92,8 @@ LDJam_Scoreboard *ldjam_init_scoreboard( LDJam_Context *ctx,
 										  uint32_t scoreboardId );
 
 // Submits a score to the server
-void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, const char *playername, int score,
+void ldjam_submit_highscore( LDJam_Context *ctx, LDJam_Scoreboard *board, 
+							 const char *playername, int score,
 						     LDJam_SubmitScore_Callback success,
 						     LDJam_ErrorCallback error );
 
